@@ -231,7 +231,6 @@ pub struct LogStream<S: SectionStorage, L: UnifiedLogWrite<S>> {
     entry_type: UnifiedLogType,
     parent_logger: Arc<Mutex<L>>,
     current_section: SectionHandle<S>,
-    current_position: usize,
     minimum_allocation_amount: usize,
     last_log_bytes: usize,
 }
@@ -261,7 +260,6 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
             entry_type,
             parent_logger,
             current_section: section,
-            current_position: 0,
             minimum_allocation_amount,
             last_log_bytes: 0,
         })
@@ -273,7 +271,7 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> Debug for LogStream<S, L> {
         write!(
             f,
             "MmapStream {{ entry_type: {:?}, current_position: {}, minimum_allocation_amount: {} }}",
-            self.entry_type, self.current_position, self.minimum_allocation_amount
+            self.entry_type, self.current_section.header.used, self.minimum_allocation_amount
         )
     }
 }
@@ -285,7 +283,6 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
         let result = self.current_section.append(obj);
         match result {
             Ok(nb_bytes) => {
-                self.current_position += nb_bytes;
                 self.current_section.header.used += nb_bytes as u32;
                 self.last_log_bytes = nb_bytes;
                 // Track encoded bytes so monitoring can compute actual bytes written.
@@ -323,7 +320,6 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                             .add_cause(e.to_string().as_str())
                         })?; // If we fail just after creating a section, there is not much we can do.
 
-                    self.current_position += result;
                     self.current_section.header.used += result as u32;
                     self.last_log_bytes = result;
                     Ok(())
